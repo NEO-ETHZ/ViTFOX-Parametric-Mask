@@ -1,0 +1,10 @@
+[project]
+name = "VPM"
+version = "0.1.0"
+description = "ViTFOX Mask Library"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "gdstk>=0.9.59",
+    "numpy>=2.2.4",
+]
