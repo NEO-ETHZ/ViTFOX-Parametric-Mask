@@ -14,8 +14,10 @@ layers = {
 UVL = 2
 EBL = 0.05
 
-# general design parameter
+# general design parameters
 wire_width = 3
 boundary_width = 1
 
-pad_dim = 100
+pad_dim = 50
+
+pad_device_spacing = 10

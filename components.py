@@ -9,15 +9,32 @@ lower_pad = feat.make_lower_pad(config.pad_dim)
 
 
 def FED2T(name: str, mesa_size: float, via_size: float=config.UVL, short: bool=False) -> gdstk.Cell:
-    """
+    """Generate a cell containg a two terminal ferroelectric resistive devices.
+    
+    Parameters
+    ----------
+    name : string
+        The text to write above the device for identification.
+    mesa_size : float
+        The size of the mesa.
+    via_size : float, optional
+        The size of the via, by default the UVL clearance.
+    short : bool, optional
+        Whether the electrodes should be shorted, bypassing the ferroelectric.
+        Defaults to False.
+    
+    Returns
+    -------
+    gdstk.Cell
+        The cell containing the device components.
     """
     Device, lower, upper = feat.make_ferro_device(mesa_size, via_size, short=short)
     Main = gdstk.Cell(f"2T_M{mesa_size}_V{via_size}")
     # device
     D = gdstk.Reference(Device, (0,0))
     # pads
-    UP = gdstk.Reference(lower_pad, (-25 - config.pad_dim/2,  0))
-    LP = gdstk.Reference(lower_pad, ( 25 + config.pad_dim/2, 0))
+    UP = gdstk.Reference(lower_pad, (D.origin[0] + upper[0] - config.pad_device_spacing - config.pad_dim/2, D.origin[1] + upper[1]))
+    LP = gdstk.Reference(lower_pad, (D.origin[0] + lower[0] + config.pad_device_spacing + config.pad_dim/2, D.origin[1] + lower[1]))
     # wires
     wire_LP_D = feat.make_wire(
         geom.route_90deg((D.origin[0] + lower[0], D.origin[1] + lower[1] + config.wire_width/2), LP.origin, "|-"),
@@ -28,25 +45,37 @@ def FED2T(name: str, mesa_size: float, via_size: float=config.UVL, short: bool=F
     # stick together
     _ = Main.add(UP, LP, wire_LP_D, wire_UP_D, D)
     # label
-    if short:
-        label = geom.make_label(name, origin=(0, 25 + config.pad_dim/2), layer=config.layers["label"][0], datatype=config.layers["label"][1])
-    else:
-        label = geom.make_label(name, origin=(0, 25 + config.pad_dim/2), layer=config.layers["label"][0], datatype=config.layers["label"][1])
+    label = feat.make_label(name, origin=(0, D.origin[1] - config.pad_device_spacing - config.pad_dim/2), layer=config.layers["label"][0], datatype=config.layers["label"][1])
     _ = Main.add(*label)
     return Main
 
 
 def make_vector_1xN(name: str, mesa_sizes: list[float], via_size: float=config.UVL) -> gdstk.Cell:
-    """
+    """Generate a cell containg a vector of two terminal ferroelectric resistive
+    devices. The bottom electrodes of these devices are electrically connected.
+    
+    Parameters
+    ----------
+    name : string
+        The text to write above the device for identification.
+    mesa_size : list of floats
+        The sizes of the mesas in the vector, determines the length of the vector.
+    via_size : float, optional
+        The size of the vias, by default the UVL clearance.
+    
+    Returns
+    -------
+    gdstk.Cell
+        The cell containing the vector components.
     """
     N = len(mesa_sizes)
     Main = gdstk.Cell(f"Vector{N}_M{str(mesa_sizes).replace(', ', '_')[1:-1]}_V{via_size}")
-    y_step = config.pad_dim + 25
+    y_step = config.pad_dim + config.pad_dim/4
     for i, mesa_size in enumerate(mesa_sizes):
         Device, lower, upper = feat.make_ferro_device(mesa_size, via_size)
         D = gdstk.Reference(Device, (0, i*y_step))
-        UP = gdstk.Reference(lower_pad, (-25 - config.pad_dim/2, i*y_step))
-        LP = gdstk.Reference(lower_pad, ( 25 + config.pad_dim/2, i*y_step))
+        UP = gdstk.Reference(lower_pad, (D.origin[0] + upper[0] - config.pad_device_spacing - config.pad_dim/2, D.origin[1] + upper[1]))
+        LP = gdstk.Reference(lower_pad, (D.origin[0] + lower[0] + config.pad_device_spacing + config.pad_dim/2, D.origin[1] + lower[1]))
         wire_UP_D = feat.make_wire(
             geom.route_90deg((D.origin[0] + upper[0], D.origin[1] + upper[1]), UP.origin),
             config.wire_width, "W1")
@@ -55,33 +84,48 @@ def make_vector_1xN(name: str, mesa_sizes: list[float], via_size: float=config.U
             config.wire_width, "W1")
         _ = Main.add(LP, UP, wire_UP_D, wire_LP_D, D)
     # connect all right pads with another
-    shared_pad = geom.rectangle(config.pad_dim*2/3, (25 + config.pad_dim) * N - config.pad_dim/2, origin=(LP.origin[0], 25+(y_step*i-config.pad_dim/2)/2))
+    shared_pad = geom.rectangle(config.pad_dim*2/3, y_step * N - config.pad_dim, origin=(LP.origin[0],config.pad_device_spacing+(y_step*i-config.pad_dim/2)/2))
     geom.set_layer_datatype(shared_pad, config.layers["W1"])
     _ = Main.add(shared_pad)
     # label
-    label = geom.make_label(name, origin=(0, i*y_step + 25 + config.pad_dim/2), layer=config.layers["label"][0], datatype=config.layers["label"][1])
+    label = feat.make_label(name, origin=(0, - config.pad_device_spacing - config.pad_dim/2), layer=config.layers["label"][0], datatype=config.layers["label"][1])
     _ = Main.add(*label)
     return Main
 
 
 def make_xbar_2x2(name: str, mesa_sizes: list[list[float, float], list[float, float]], via_size: float=config.UVL)  -> gdstk.Cell:
-    """include pads and stuff for now
-    will need to move those outside so are set universally
+    """Generate a cell containg a 2x2 cross bar array of two terminal
+    ferroelectric resistive devices.
+    
+    Parameters
+    ----------
+    name : string
+        The text to write above the device for identification.
+    mesa_sizes : nested list of floats
+        The sizes of the mesas in the cross bar array. Should of shape (2, 2).
+    via_size : float, optional
+        The size of the vias, by default the UVL clearance.
+    
+    Returns
+    -------
+    gdstk.Cell
+        The cell containing the cross bar components.
     """
     Main = gdstk.Cell(f"XBAR_M{str(mesa_sizes).replace(', ', '_')[2:-2].replace(']_[', '__')}_V{via_size}")
+    sep = config.pad_dim/4
     Device_NW, lower_NW, upper_NW = feat.make_ferro_device(mesa_sizes[0][0], via_size)
     Device_NE, lower_NE, upper_NE = feat.make_ferro_device(mesa_sizes[0][1], via_size)
     Device_SW, lower_SW, upper_SW = feat.make_ferro_device(mesa_sizes[1][0], via_size)
     Device_SE, lower_SE, upper_SE = feat.make_ferro_device(mesa_sizes[1][1], via_size)
-    D_NW = gdstk.Reference(Device_NW, ( 0, 25 + config.pad_dim))
-    D_NE = gdstk.Reference(Device_NE, (25*2, 25 + config.pad_dim))
+    D_NW = gdstk.Reference(Device_NW, ( 0, sep + config.pad_dim))
+    D_NE = gdstk.Reference(Device_NE, (sep*2, sep + config.pad_dim))
     D_SW = gdstk.Reference(Device_SW, ( 0, 0))
-    D_SE = gdstk.Reference(Device_SE, (25*2, 0))
+    D_SE = gdstk.Reference(Device_SE, (sep*2, 0))
     _ = Main.add(D_NW, D_NE, D_SW, D_SE)
-    UP_1 = gdstk.Reference(lower_pad, (-25*1.5 - config.pad_dim/2,  25 + config.pad_dim))
-    UP_2 = gdstk.Reference(lower_pad, (25*1.5 + config.pad_dim,  0))
-    LP_1 = gdstk.Reference(lower_pad, (-25*1.5 - config.pad_dim/2,   0))
-    LP_2 = gdstk.Reference(lower_pad, (25*1.5 + config.pad_dim,  25 + config.pad_dim))
+    UP_1 = gdstk.Reference(lower_pad, (-sep*1.5 - config.pad_dim/2,  sep + config.pad_dim))
+    UP_2 = gdstk.Reference(lower_pad, (sep*1.5 + config.pad_dim,  0))
+    LP_1 = gdstk.Reference(lower_pad, (-sep*1.5 - config.pad_dim/2,   0))
+    LP_2 = gdstk.Reference(lower_pad, (sep*1.5 + config.pad_dim,  sep + config.pad_dim))
     _ = Main.add(LP_1, LP_2, UP_1, UP_2)
     # UP_1
     temp_point = (D_NW.origin[0] + upper_NW[0], D_NW.origin[1] + upper_NW[1] + config.pad_dim/4)
@@ -126,7 +170,7 @@ def make_xbar_2x2(name: str, mesa_sizes: list[list[float, float], list[float, fl
             config.wire_width, "W1")
     _ = Main.add(wire_LP_2)
     # label
-    label = geom.make_label(name, origin=(25, 2*config.pad_dim), layer=config.layers["label"][0], datatype=config.layers["label"][1])
+    label = feat.make_label(name, origin=(sep, - config.pad_device_spacing - config.pad_dim/2), layer=config.layers["label"][0], datatype=config.layers["label"][1])
     _ = Main.add(*label)
     return Main
 

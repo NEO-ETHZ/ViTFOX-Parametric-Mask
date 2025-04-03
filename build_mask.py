@@ -4,9 +4,6 @@ import numpy as np
 
 import config
 
-import geometry as geom
-import components as comp
-
 
 # define layer mapping
 # fill / boundary denotes whether the geometric feature should be kept as a
@@ -33,14 +30,21 @@ config.boundary_width = 1
 
 config.pad_dim = 100
 
+config.pad_device_spacing = max(10, config.UVL)
+
 # define location to save mask
 #outfile = f"mask_{datetime.now().strftime('%Y%m%d-%H%M%S')}.gds"
 outfile = "mask.gds"
 
+# reimport so updates config
+import geometry as geom
+import components as comp
+
+
 # example placement of structures
-dev0 = comp.FED2T("FE", 20)
+dev0 = comp.FED2T("FE", 25)
 dev1 = comp.make_vector_1xN("VECTOR", np.ones(25)*5)
-dev2 = comp.make_xbar_2x2("XBAR", [[1, 2], [3, 4]])
+dev2 = comp.make_xbar_2x2("XBAR", [[10, 12], [12, 10]])
 short0 = comp.FED2T("SHORT", 1, short=True)
 
 top = gdstk.Cell("TOP")
@@ -58,14 +62,14 @@ def add_children(cell: gdstk.Cell, lib: gdstk.Library) -> None:
     """
     _ = lib.add(cell)
     for ref in cell.references:
-        if ref.cell.name not in [cell.name for cell in lib.cells]: # not very optimised
+        if ref.cell.name not in [cell.name for cell in lib.cells]:
             add_children(ref.cell, lib)    
 
 add_children(top, lib)
 
 # would run DRC here if wanted to
 
-# then do any inverting/converting to edge
+# then do any inverting/converting to boundary on flattened cells
 flat_top = top.flatten()
 mapping = {}
 
@@ -107,3 +111,15 @@ flat_lib = gdstk.Library()
 _ = flat_lib.add(flat_cell)
 
 flat_lib.write_gds(outfile)
+
+# if want to merge with e.g. template file
+#template_lib = gdstk.read_gds("template.gds")
+#
+# look for cell to place into and check for naming collisions
+#target_cell_name = "your_die_design"
+#for cell in template_lib.cells:
+#    if cell.name == target_cell_name:
+#        cell.add(gdstk.Reference(flat_cell))
+#        template_lib.add(flat_cell)
+#
+#template_lib.write_gds(outfile)
